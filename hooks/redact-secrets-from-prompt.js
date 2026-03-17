@@ -212,10 +212,10 @@ async function main() {
     return;
   }
 
-  // stderr: user notification (shown in verbose mode)
-  var parts = ['[midsummer-vault] Detected and redacted secrets:'];
+  // log detections (file only, NOT stderr — stderr causes "hook error" in Claude Code)
+  var parts = ['detected secrets:'];
   for (var i = 0; i < found.length; i++) parts.push('  ' + found[i].ref + ' (' + found[i].type + ')');
-  process.stderr.write(parts.join('\n') + '\n');
+  log(parts.join(', '));
 
   // build context guidance for Claude
   var guidance = '<vault-context>\nSecrets detected and redacted from your message.\n';
