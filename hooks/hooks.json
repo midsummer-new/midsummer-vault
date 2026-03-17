@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/block-env-access.js",
-            "timeout": 5000
+            "timeout": 5
           }
         ]
       },
@@ -17,7 +17,7 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/block-env-write.js",
-            "timeout": 5000
+            "timeout": 5
           }
         ]
       }
@@ -29,7 +29,7 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/redact-bash-output.js",
-            "timeout": 10000
+            "timeout": 10
           }
         ]
       },
@@ -39,7 +39,7 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/redact-read-output.js",
-            "timeout": 10000
+            "timeout": 10
           }
         ]
       }
@@ -50,7 +50,7 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/redact-secrets-from-prompt.js",
-            "timeout": 10000
+            "timeout": 10
           }
         ]
       }

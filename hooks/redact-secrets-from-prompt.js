@@ -4,13 +4,26 @@
  * UserPromptSubmit hook: multi-layer secret detection and redaction.
  * Scans user messages BEFORE the model sees them.
  *
+ * Claude Code protocol for UserPromptSubmit hooks:
+ *   Input:  { session_id, prompt, cwd, hook_event_name, ... }
+ *   Output: plain text on stdout = added as context to conversation
+ *           OR JSON { additionalContext, decision, reason }
+ *           OR empty output + exit 0 = passthrough (no-op)
+ *
  * IMPORTANT: This hook MUST NOT crash. Any error = passthrough.
  */
+
+const fs = require('fs');
+const LOG = '/tmp/vault-hook-debug.log';
+
+function log(msg) {
+  try { fs.appendFileSync(LOG, '[' + new Date().toISOString() + '] ' + msg + '\n'); } catch {}
+}
 
 let crypto;
 try { crypto = require('node:crypto'); } catch { crypto = require('crypto'); }
 
-// ─── Layer 1: Known Service Prefixes ────────────────────────────────────────
+// --- Layer 1: Known Service Prefixes ---
 const KNOWN = [
   [/\bsk_live_[a-zA-Z0-9]{10,99}\b/g, 'STRIPE_SECRET', 'api_key'],
   [/\bsk_test_[a-zA-Z0-9]{10,99}\b/g, 'STRIPE_TEST', 'api_key'],
@@ -35,14 +48,14 @@ const KNOWN = [
   [/\bre_[a-zA-Z0-9]{30,}\b/g, 'RESEND_KEY', 'api_key'],
 ];
 
-// ─── Layer 2: Structural ────────────────────────────────────────────────────
+// --- Layer 2: Structural ---
 const STRUCTURAL = [
   [/\b(ey[a-zA-Z0-9]{17,}\.ey[a-zA-Z0-9/\\_-]{17,}\.[a-zA-Z0-9/\\_-]{10,}=*)\b/g, 'JWT', 'access_token'],
   [/-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----[\s\S]{20,}?-----END/g, 'PRIVATE_KEY', 'private_key'],
   [/\b((?:postgres|mysql|mongodb|redis|amqp|mssql)(?:ql)?:\/\/[^\s'"]{10,})\b/g, 'CONNECTION_STRING', 'connection_string'],
 ];
 
-// ─── Layer 3: Entropy ───────────────────────────────────────────────────────
+// --- Layer 3: Entropy ---
 const B64 = new Set('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=');
 const HEX = new Set('0123456789abcdefABCDEF');
 const THRESHOLDS = { hex: 3.0, base64: 4.5, mixed: 4.0 };
@@ -93,131 +106,145 @@ function envName(n) { return ENV_MAP[n.replace(/_[a-f0-9]{8}$/,'')] || n; }
 function tryStore(name, value) {
   try {
     require('child_process').execFileSync('vault', ['set', name, value], {
-      stdio: 'pipe', timeout: 5000, env: { ...process.env, PATH: process.env.PATH + ':/usr/local/bin:/opt/homebrew/bin' }
+      stdio: 'pipe', timeout: 3000, env: { ...process.env, PATH: process.env.PATH + ':/usr/local/bin:/opt/homebrew/bin' }
     });
     return true;
   } catch { return false; }
 }
 
-// ─── Main ───────────────────────────────────────────────────────────────────
+// --- Main ---
 function readStdin() {
-  return new Promise(r => {
-    let d = ''; process.stdin.setEncoding('utf8');
-    process.stdin.on('data', c => d += c);
-    process.stdin.on('end', () => r(d));
-    // timeout: if no data in 3s, resolve with empty
-    setTimeout(() => r(d || ''), 3000);
+  return new Promise(function(resolve, reject) {
+    var d = '';
+    var resolved = false;
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', function(c) { d += c; });
+    process.stdin.on('end', function() { if (!resolved) { resolved = true; resolve(d); } });
+    process.stdin.on('error', function(e) { if (!resolved) { resolved = true; reject(e); } });
+    setTimeout(function() { if (!resolved) { resolved = true; resolve(d || ''); } }, 5000);
   });
 }
 
 async function main() {
-  let raw;
-  try { raw = await readStdin(); } catch { process.exit(0); return; }
-  if (!raw || !raw.trim()) { process.exit(0); return; }
+  log('--- hook invoked ---');
 
-  let input;
-  try { input = JSON.parse(raw); } catch { process.stdout.write(raw); process.exit(0); return; }
+  var raw;
+  try { raw = await readStdin(); } catch (e) { log('stdin error: ' + e); process.exit(0); return; }
+  log('raw input (first 500): ' + (raw || '').substring(0, 500));
 
-  // extract prompt — Claude Code sends { user_prompt: "..." }
-  const prompt = String(
-    input?.user_prompt || input?.input?.prompt || input?.prompt || input?.message || input?.content || ''
-  );
+  if (!raw || !raw.trim()) { log('empty input, passthrough'); process.exit(0); return; }
 
-  if (!prompt) { process.stdout.write(raw); process.exit(0); return; }
+  var input;
+  try { input = JSON.parse(raw); } catch (e) {
+    log('JSON parse failed: ' + e.message);
+    process.exit(0);
+    return;
+  }
 
-  // track which field we need to write back to
-  const promptField = input?.user_prompt !== undefined ? 'user_prompt'
-    : input?.input?.prompt !== undefined ? 'input.prompt'
-    : input?.prompt !== undefined ? 'prompt'
-    : input?.message !== undefined ? 'message'
-    : 'content';
+  log('parsed fields: ' + Object.keys(input).join(', '));
 
-  let text = prompt;
-  const found = [];
+  // extract prompt — Claude Code sends { prompt: "..." }
+  var prompt = String(input.prompt || input.user_prompt || input.message || input.content || '');
+
+  log('prompt field: ' + (input.prompt ? 'prompt' : input.user_prompt ? 'user_prompt' : input.message ? 'message' : input.content ? 'content' : 'NONE'));
+  log('prompt length: ' + prompt.length);
+
+  if (!prompt) {
+    log('no prompt found, passthrough');
+    process.exit(0);
+    return;
+  }
+
+  var text = prompt;
+  var found = [];
 
   // layer 1: known prefixes
-  for (const [re, name, type] of KNOWN) {
-    const pat = new RegExp(re.source, re.flags);
-    let m;
+  for (var i = 0; i < KNOWN.length; i++) {
+    var re = KNOWN[i][0], name = KNOWN[i][1], type = KNOWN[i][2];
+    var pat = new RegExp(re.source, re.flags);
+    var m;
     while ((m = pat.exec(text)) !== null) {
       if (m[0].length < 10) continue;
-      const h = hash(m[0]); const ref = `${name}_${h}`;
-      const ok = tryStore(ref, m[0]);
-      text = text.replace(m[0], ok ? `[vault:${ref}]` : `[REDACTED:${name}]`);
-      found.push({ ref, type, auto: true, env: envName(name) });
+      var h = hash(m[0]); var ref = name + '_' + h;
+      var ok = tryStore(ref, m[0]);
+      text = text.replace(m[0], ok ? '[vault:' + ref + ']' : '[REDACTED:' + name + ']');
+      found.push({ ref: ref, type: type, auto: true, env: envName(name) });
       pat.lastIndex = 0;
     }
   }
 
   // layer 2: structural
-  for (const [re, name, type] of STRUCTURAL) {
-    const pat = new RegExp(re.source, re.flags);
-    let m;
+  for (var i = 0; i < STRUCTURAL.length; i++) {
+    var re = STRUCTURAL[i][0], name = STRUCTURAL[i][1], type = STRUCTURAL[i][2];
+    var pat = new RegExp(re.source, re.flags);
+    var m;
     while ((m = pat.exec(text)) !== null) {
-      const v = m[1] || m[0];
+      var v = m[1] || m[0];
       if (v.length < 10 || v.includes('[vault:')) continue;
-      const h = hash(v); const ref = `${name}_${h}`;
-      const ok = tryStore(ref, v);
-      text = text.replace(v, ok ? `[vault:${ref}]` : `[REDACTED:${name}]`);
-      found.push({ ref, type, auto: true, env: envName(name) });
+      var h = hash(v); var ref = name + '_' + h;
+      var ok = tryStore(ref, v);
+      text = text.replace(v, ok ? '[vault:' + ref + ']' : '[REDACTED:' + name + ']');
+      found.push({ ref: ref, type: type, auto: true, env: envName(name) });
       pat.lastIndex = 0;
     }
   }
 
   // layer 3+4: entropy + keyword proximity
   ENTROPY_RE.lastIndex = 0;
-  let em;
+  var em;
   while ((em = ENTROPY_RE.exec(text)) !== null) {
-    const c = em[1];
+    var c = em[1];
     if (c.includes('[vault:') || c.includes('[REDACTED:')) continue;
     if (!looksSecret(c)) continue;
-    const h = hash(c); const ref = `SECRET_${h}`;
-    const ok = tryStore(ref, c);
-    text = text.replace(c, ok ? `[vault:${ref}]` : `[REDACTED:SECRET]`);
-    const win = text.substring(Math.max(0,em.index-80), Math.min(text.length,em.index+c.length+80));
+    var h = hash(c); var ref = 'SECRET_' + h;
+    var ok = tryStore(ref, c);
+    text = text.replace(c, ok ? '[vault:' + ref + ']' : '[REDACTED:SECRET]');
+    var win = text.substring(Math.max(0,em.index-80), Math.min(text.length,em.index+c.length+80));
     KW_RE.lastIndex = 0;
-    const nearKw = KW_RE.test(win);
-    found.push({ ref, type: nearKw ? 'credential' : 'unknown', auto: false });
+    var nearKw = KW_RE.test(win);
+    found.push({ ref: ref, type: nearKw ? 'credential' : 'unknown', auto: false });
     ENTROPY_RE.lastIndex = 0;
   }
 
-  if (found.length > 0) {
-    // stderr: user notification
-    const parts = ['[midsummer-vault] Detected secrets:'];
-    for (const f of found) parts.push(`  ${f.ref} (${f.type})`);
-    process.stderr.write(parts.join('\n') + '\n');
-
-    // append guidance to prompt
-    let g = '\n\n<vault-context>\nSecrets detected and stored in local vault.\n';
-    const auto = found.filter(f => f.auto);
-    const manual = found.filter(f => !f.auto);
-    if (auto.length) {
-      g += 'Auto-classified:\n';
-      for (const f of auto) g += `  [vault:${f.ref}] (${f.type}) -> env: ${f.env}\n`;
-    }
-    if (manual.length) {
-      g += 'Needs naming (ask user what env var):\n';
-      for (const f of manual) g += `  [vault:${f.ref}] (${f.type})\n`;
-      g += 'Run: vault rename SECRET_xxx ENV_VAR_NAME\n';
-    }
-    g += 'Run commands with secrets: vault run -- <cmd>\n';
-    g += 'If vault not initialized: vault init\n';
-    g += '</vault-context>';
-    text += g;
+  if (found.length === 0) {
+    log('no secrets found, passthrough');
+    process.exit(0);
+    return;
   }
 
-  // write back modified input to the correct field
-  if (text !== prompt) {
-    if (promptField === 'user_prompt') input.user_prompt = text;
-    else if (promptField === 'input.prompt') input.input.prompt = text;
-    else if (promptField === 'prompt') input.prompt = text;
-    else if (promptField === 'message') input.message = text;
-    else input.content = text;
-    process.stdout.write(JSON.stringify(input));
-  } else {
-    process.stdout.write(raw);
+  // stderr: user notification (shown in verbose mode)
+  var parts = ['[midsummer-vault] Detected and redacted secrets:'];
+  for (var i = 0; i < found.length; i++) parts.push('  ' + found[i].ref + ' (' + found[i].type + ')');
+  process.stderr.write(parts.join('\n') + '\n');
+
+  // build context guidance for Claude
+  var guidance = '<vault-context>\nSecrets detected and redacted from your message.\n';
+  guidance += 'The original prompt with redactions applied:\n' + text + '\n\n';
+
+  var auto = found.filter(function(f) { return f.auto; });
+  var manual = found.filter(function(f) { return !f.auto; });
+  if (auto.length) {
+    guidance += 'Auto-classified secrets:\n';
+    for (var i = 0; i < auto.length; i++) guidance += '  [vault:' + auto[i].ref + '] (' + auto[i].type + ') -> env: ' + auto[i].env + '\n';
   }
+  if (manual.length) {
+    guidance += 'Secrets needing naming (ask user what env var):\n';
+    for (var i = 0; i < manual.length; i++) guidance += '  [vault:' + manual[i].ref + '] (' + manual[i].type + ')\n';
+    guidance += 'Run: vault rename SECRET_xxx ENV_VAR_NAME\n';
+  }
+  guidance += 'Run commands with secrets: vault run -- <cmd>\n';
+  guidance += 'If vault not initialized: vault init\n';
+  guidance += '</vault-context>';
+
+  log('found ' + found.length + ' secrets, outputting plain text context');
+
+  // Output per Claude Code UserPromptSubmit protocol:
+  // plain text on stdout is added as context to the conversation
+  process.stdout.write(guidance);
   process.exit(0);
 }
 
-main().catch(() => { try { process.stdout.write(''); } catch {} process.exit(0); });
+main().catch(function(e) {
+  log('fatal error: ' + (e && e.message ? e.message : e));
+  process.exit(0);
+});
