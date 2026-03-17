@@ -118,12 +118,19 @@ async function main() {
   let input;
   try { input = JSON.parse(raw); } catch { process.stdout.write(raw); process.exit(0); return; }
 
-  // extract prompt from various possible input shapes
+  // extract prompt — Claude Code sends { user_prompt: "..." }
   const prompt = String(
-    input?.input?.prompt || input?.prompt || input?.message || input?.content || ''
+    input?.user_prompt || input?.input?.prompt || input?.prompt || input?.message || input?.content || ''
   );
 
   if (!prompt) { process.stdout.write(raw); process.exit(0); return; }
+
+  // track which field we need to write back to
+  const promptField = input?.user_prompt !== undefined ? 'user_prompt'
+    : input?.input?.prompt !== undefined ? 'input.prompt'
+    : input?.prompt !== undefined ? 'prompt'
+    : input?.message !== undefined ? 'message'
+    : 'content';
 
   let text = prompt;
   const found = [];
@@ -199,12 +206,13 @@ async function main() {
     text += g;
   }
 
-  // write back modified input
+  // write back modified input to the correct field
   if (text !== prompt) {
-    if (input?.input?.prompt !== undefined) input.input.prompt = text;
-    else if (input?.prompt !== undefined) input.prompt = text;
-    else if (input?.message !== undefined) input.message = text;
-    else if (input?.content !== undefined) input.content = text;
+    if (promptField === 'user_prompt') input.user_prompt = text;
+    else if (promptField === 'input.prompt') input.input.prompt = text;
+    else if (promptField === 'prompt') input.prompt = text;
+    else if (promptField === 'message') input.message = text;
+    else input.content = text;
     process.stdout.write(JSON.stringify(input));
   } else {
     process.stdout.write(raw);
