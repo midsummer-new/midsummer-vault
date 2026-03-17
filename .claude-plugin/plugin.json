@@ -6,8 +6,8 @@
     "name": "Midsummer AI Labs AB",
     "url": "https://midsummer.new"
   },
-  "homepage": "https://github.com/midsummer-new/vault",
-  "repository": "https://github.com/midsummer-new/vault",
+  "homepage": "https://github.com/midsummer-new/midsummer-vault",
+  "repository": "https://github.com/midsummer-new/midsummer-vault",
   "license": "Apache-2.0",
   "keywords": ["security", "secrets", "vault", "env", "api-keys", "agent-safety"],
   "category": "security",

@@ -8,18 +8,22 @@
 
 Secrets are encrypted locally and injected into child processes at runtime. The AI agent never sees the actual values — not in the prompt, not in tool output, not in file contents.
 
-## Quick Start
+## Install
 
 ```bash
 npm install -g @midsummerai/vault
-
-vault init
-vault set STRIPE_KEY sk_live_...
-vault set DATABASE_URL postgres://...
-vault run -- npm run dev
 ```
 
-That's it. Your dev server has `STRIPE_KEY` and `DATABASE_URL` in its environment. The AI agent that launched it never saw the values.
+## Quick Start
+
+```bash
+vault init                          # create encrypted vault
+vault set STRIPE_KEY sk_live_...    # store a secret
+vault set DATABASE_URL postgres://...
+vault run -- npm run dev            # inject secrets into process
+```
+
+That's it. Your dev server has the secrets in its environment. The AI agent that launched it never saw the values.
 
 ## Claude Code Plugin
 
@@ -40,28 +44,31 @@ Install the plugin to automatically detect and redact secrets from your conversa
 | **Bash redaction** | Agent command outputs a secret | Redacts known values from output |
 | **Read redaction** | Agent reads a file with secrets | Redacts known values from content |
 
-### How secret detection works
+### How it works
 
 ```
 You type:  "use this stripe key sk_live_51OaJqDG..."
 
-Hook detects Stripe key -> stores in vault -> replaces in prompt
+Hook intercepts -> stores in vault -> replaces in prompt
 
 Model sees: "use this stripe key [vault:STRIPE_SECRET_c36b]"
 
-Model:     "I stored your Stripe key. I'll map it to STRIPE_SECRET_KEY."
-           $ vault rename STRIPE_SECRET_c36b STRIPE_SECRET_KEY
+Model asks: "What env var should this be?"
+You:        "STRIPE_SECRET_KEY"
+Model runs: vault rename STRIPE_SECRET_c36b STRIPE_SECRET_KEY
 
-Model:     $ vault run -- npm start     <- secrets injected, model never saw them
+Model runs: vault run -- npm start
+            (secrets injected, model never saw values)
 ```
 
-**Detection layers:**
-1. **Known prefixes** -- 35+ services: Stripe, AWS, GitHub, OpenAI, Slack, SendGrid...
-2. **Structural patterns** -- JWTs (`eyJ...`), connection strings (`postgres://...`), private keys
-3. **Shannon entropy** -- catches unknown high-randomness strings (like Redis tokens)
-4. **Keyword proximity** -- boosts confidence when "key", "secret", "token" appear nearby
+### Detection layers
 
-## Commands
+1. **Known prefixes** — 35+ services: Stripe, AWS, GitHub, OpenAI, Anthropic, Slack, SendGrid...
+2. **Structural patterns** — JWTs, connection strings, private keys
+3. **Shannon entropy** — catches unknown high-randomness strings (Redis tokens, custom API keys)
+4. **Keyword proximity** — boosts confidence near "key", "secret", "token"
+
+## CLI Commands
 
 | Command | What |
 |---------|------|
@@ -75,93 +82,60 @@ Model:     $ vault run -- npm start     <- secrets injected, model never saw the
 | `vault import .env` | Bulk import from a .env file |
 | `vault status` | Show vault state |
 
-## How It Works
+## How secrets are protected
 
-```
-vault run -- npm start
-      |
-      +-- Reads .vault/secrets.enc (AES-256-GCM encrypted)
-      +-- Decrypts with key from .vault/key (or VAULT_KEY env)
-      +-- Merges secrets into environment
-      +-- syscall.Exec replaces process
-            |
-            +-- npm start runs with STRIPE_KEY, DATABASE_URL, etc.
-               The parent process (agent) is gone. No way to inspect.
-```
+**Encryption:** AES-256-GCM with random 12-byte IV per write. 256-bit key stored with 0600 permissions.
 
-**Encryption:** AES-256-GCM with random 12-byte IV per write. Key is 256-bit random, stored in `.vault/key` with `0600` permissions.
+**Process isolation:** `vault run` uses `syscall.Exec` to replace the current process. There is no parent process to inspect — the agent process is gone.
 
-**Process isolation:** `syscall.Exec` replaces the current process entirely. There is no parent process for the agent to query. On Windows, `exec.Command` is used with stdin/stdout/stderr forwarding.
+**Prompt redaction:** The `UserPromptSubmit` hook scans your message before the model sees it. Detected secrets are auto-stored in the vault and replaced with `[vault:REF]` references.
+
+**Output redaction:** `PostToolUse` hooks scan Bash command output and file contents for known vault values and replace them before the model sees the results.
 
 ## CI/CD
-
-No key file needed. Set `VAULT_KEY` as an environment variable:
 
 ```yaml
 # GitHub Actions
 env:
   VAULT_KEY: ${{ secrets.VAULT_KEY }}
-
 steps:
   - run: vault run -- npm test
 ```
 
-Or use the env prefix pattern (no vault CLI needed):
-
-```yaml
-env:
-  VAULT_SECRET_STRIPE_KEY: ${{ secrets.STRIPE_KEY }}
-  VAULT_SECRET_DATABASE_URL: ${{ secrets.DATABASE_URL }}
-```
-
 ## Team Sharing
 
-Share the encryption key with your team via a secure channel:
-
 ```bash
+# share the key via secure channel (1Password, encrypted DM)
 cat .vault/key
-# give this to teammates via 1Password, encrypted DM, etc.
+
+# teammates add it to their project
+echo "the-shared-key" > .vault/key
+vault run -- npm start
 ```
 
-Teammates clone the repo, create `.vault/key` with the shared key, and `vault run` works.
-
-## Project Structure
+## Plugin Structure
 
 ```
-.vault/
-+-- .gitignore      # blocks everything in .vault/
-+-- key             # 256-bit encryption key (0600 perms)
-+-- secrets.enc     # AES-256-GCM encrypted secrets
-```
-
-## Providers
-
-Built-in support for pulling secrets from external systems:
-
-| Provider | How |
-|----------|-----|
-| **Local** (default) | `.vault/secrets.enc` |
-| **AWS Secrets Manager** | Shells out to `aws secretsmanager get-secret-value` |
-| **1Password** | Shells out to `op read op://vault/item/field` |
-| **Env prefix** | `VAULT_SECRET_*` env vars stripped and injected |
-
-## Install
-
-**npm** (recommended):
-```bash
-npm install -g @midsummerai/vault
-```
-
-**Go:**
-```bash
-go install github.com/midsummer-new/midsummer-vault/cmd/vault@latest
-```
-
-**Script:**
-```bash
-curl -fsSL https://raw.githubusercontent.com/midsummer-new/midsummer-vault/main/install.sh | sh
+midsummer-vault/
+  .claude-plugin/
+    plugin.json           # plugin manifest
+    marketplace.json      # marketplace catalog
+  hooks/
+    hooks.json            # hook registration (5 hooks)
+    redact-secrets-from-prompt.js   # 4-layer detection + auto-store
+    block-env-access.js             # blocks env inspection
+    block-env-write.js              # blocks .env writes
+    redact-bash-output.js           # output redaction
+    redact-read-output.js           # file redaction
+  skills/
+    vault-setup/SKILL.md  # guided vault setup
+  commands/
+    vault-run.md           # /vault-run shortcut
+    vault-check.md         # /vault-check shortcut
+  rules/
+    no-env-secrets.md      # auto-loaded when editing .env files
 ```
 
 ## License
 
-Apache-2.0 -- Midsummer AI Labs AB
+Apache-2.0 — [Midsummer AI Labs AB](https://midsummer.new)

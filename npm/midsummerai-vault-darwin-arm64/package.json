@@ -1,8 +1,0 @@
-{
-  "name": "@midsummerai/vault-darwin-arm64",
-  "version": "0.1.0",
-  "description": "Midsummer Vault CLI binary for macOS ARM64",
-  "os": ["darwin"],
-  "cpu": ["arm64"],
-  "license": "MIT"
-}
