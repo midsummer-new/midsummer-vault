@@ -12,98 +12,87 @@ Set up secret management that keeps API keys away from AI agents.
 - User asks to "set up vault", "configure secrets", "store API keys"
 - User is working with .env files and needs a safer alternative
 - User mentions keeping secrets away from agents/AI
-- Project needs headless/CI secret injection
+- User pastes what looks like an API key or token
 
-## Quick Setup
+## Setup (30 seconds)
 
-### 1. Install the CLI
+### Step 1: Initialize vault in the project
 
 ```bash
-npm install -g @midsummerai/vault
+vault init
 ```
 
-### 2. Start a Vault Server (or use Midsummer Cloud)
+This creates `.vault/` with an encrypted store and a random encryption key.
 
-**Self-hosted (Docker):**
+### Step 2: Store secrets
+
 ```bash
-export VAULT_ENCRYPTION_KEY=$(openssl rand -hex 32)
-export SESSION_SECRET=$(openssl rand -base64 48)
-docker run -d -p 8080:8080 -v vault-data:/data \
-  -e VAULT_ENCRYPTION_KEY=$VAULT_ENCRYPTION_KEY \
-  -e SESSION_SECRET=$SESSION_SECRET \
-  ghcr.io/midsummer-new/vault-server:latest
+vault set STRIPE_KEY sk_live_...
+vault set DATABASE_URL postgres://user:pass@host:5432/db
+vault set REDIS_URL redis://default:token@host:6379
 ```
 
-**Then open http://localhost:8080/setup to create your admin account.**
-
-### 3. Authenticate the CLI
+### Step 3: Run commands with secrets injected
 
 ```bash
-vault login --api-url http://localhost:8080
-```
-
-### 4. Create a Project and Set Secrets
-
-```bash
-# Create project via API
-curl -X POST http://localhost:8080/api/projects \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "my-project"}'
-# Returns: {"id": "proj_xxx", "name": "my-project"}
-
-# Add .vault.toml to your project root
-cat > .vault.toml << 'EOF'
-[vault]
-project_id = "proj_xxx"
-api_url = "http://localhost:8080"
-EOF
-
-# Set secrets via API
-curl -X POST http://localhost:8080/api/vault/proj_xxx/secrets \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "STRIPE_KEY", "value": "sk_live_..."}'
-```
-
-### 5. Run Commands with Secrets
-
-```bash
-# secrets are injected as env vars — agent never sees them
 vault run -- npm run dev
 vault run -- python manage.py runserver
+vault run -- node server.js
 ```
 
-## How It Protects Against Agents
+The child process gets all vault secrets as environment variables. The AI agent (you) never sees the actual values.
 
-1. **`vault run`** fetches secrets server-side, injects them into the child process via `syscall.Exec` — the agent process never has access to the values
-2. **Shell hardening** blocks `env`, `printenv`, `export -p`, `declare -x`, `compgen -v` inside sandboxes
-3. **Output redaction** strips secret values from captured output before the agent sees them
-4. **This plugin's hooks** block Bash commands that try to read .env files or echo secrets
+## If the user pastes a secret in chat
 
-## For CI/CD and Sandboxes
+The `UserPromptSubmit` hook should catch it and replace with `[vault:REF]`. If you see a `[vault:SECRET_xxx]` reference:
+
+1. Ask the user what environment variable name to use
+2. Run: `vault rename SECRET_xxx ENV_VAR_NAME`
+3. Confirm with: `vault list`
+
+If the hook didn't catch it and you see a raw secret value, immediately run:
+```bash
+vault set SUGGESTED_ENV_NAME "the-value-here"
+```
+Then tell the user to avoid pasting secrets directly — the hook should handle it.
+
+## Import existing .env file
 
 ```bash
-# Get a service token (4h, project-scoped)
-export VAULT_SERVICE_TOKEN=<token from API>
-export VAULT_PROJECT_ID=proj_xxx
-export VAULT_API_URL=http://your-vault:8080
+vault import .env.local
+```
 
+This reads all KEY=value pairs and stores them encrypted in the vault.
+
+## Useful commands
+
+| Command | What |
+|---------|------|
+| `vault list` | Show stored secret names (never values) |
+| `vault status` | Show vault state |
+| `vault rename OLD NEW` | Map a secret to a different env var name |
+| `vault rm KEY` | Remove a secret |
+| `vault get KEY` | Retrieve a value (avoid showing to user) |
+
+## CI/CD
+
+Set `VAULT_KEY` as an environment variable (the hex key from `.vault/key`):
+
+```bash
+export VAULT_KEY=<from .vault/key>
 vault run -- npm test
 ```
 
-## CLAUDE.md Snippet
+## CLAUDE.md snippet
 
-Add this to your project's CLAUDE.md to enforce vault usage:
+Add this to enforce vault usage in the project:
 
 ```markdown
-## Secrets Management
+## Secrets
 
-NEVER hardcode API keys, tokens, or passwords in source code or .env files.
 All secrets are managed via Midsummer Vault.
-
-- Use `vault run -- <command>` to run commands that need secrets
-- Never read, cat, or echo .env files containing real secrets
+- Store: vault set KEY value
+- Use: vault run -- <command>
+- Never hardcode secrets in source code or .env files
 - Use .env.example with placeholder values for documentation
-- For CI/CD: use VAULT_SERVICE_TOKEN (4h, project-scoped, non-refreshable)
 ```
