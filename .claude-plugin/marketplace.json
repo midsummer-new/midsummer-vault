@@ -1,0 +1,27 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "midsummer-vault",
+  "description": "Secret management for AI agents — keeps API keys away from LLMs",
+  "owner": {
+    "name": "Midsummer AI Labs AB",
+    "email": "hello@midsummer.new"
+  },
+  "plugins": [
+    {
+      "name": "midsummer-vault",
+      "source": "./claude-code-plugin",
+      "description": "Prevent AI agents from accessing secrets. Auto-detects and redacts API keys from prompts, blocks env inspection, and redacts secrets from tool output.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Midsummer AI Labs AB",
+        "email": "hello@midsummer.new"
+      },
+      "homepage": "https://github.com/midsummer-new/midsummer-vault",
+      "repository": "https://github.com/midsummer-new/midsummer-vault",
+      "license": "Apache-2.0",
+      "keywords": ["security", "secrets", "vault", "api-keys", "redaction", "agent-safety"],
+      "category": "security",
+      "tags": ["security", "secrets", "hooks", "redaction"]
+    }
+  ]
+}
