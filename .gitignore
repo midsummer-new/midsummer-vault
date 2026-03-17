@@ -1,0 +1,25 @@
+# binaries
+vault
+vault.exe
+/dist/
+/data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# test
+/coverage/
+*.test.out
+
+# env (never commit real secrets)
+.env
+.env.local
+.env.production
+.vault/

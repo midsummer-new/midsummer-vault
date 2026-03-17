@@ -1,0 +1,17 @@
+{
+  "name": "midsummer-vault",
+  "version": "1.0.0",
+  "description": "Prevent AI agents from accessing secrets. Stores API keys in a vault, injects them at runtime via `vault run`, and blocks env inspection commands.",
+  "author": {
+    "name": "Midsummer AI Labs AB",
+    "url": "https://midsummer.new"
+  },
+  "homepage": "https://github.com/midsummer-new/vault",
+  "repository": "https://github.com/midsummer-new/vault",
+  "license": "Apache-2.0",
+  "keywords": ["security", "secrets", "vault", "env", "api-keys", "agent-safety"],
+  "category": "security",
+  "skills": ["./skills/vault-setup/SKILL.md"],
+  "commands": ["./commands/vault-run.md", "./commands/vault-check.md"],
+  "rules": ["./rules/no-env-secrets.md"]
+}

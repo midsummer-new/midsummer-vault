@@ -1,0 +1,19 @@
+{
+  "name": "@midsummerai/vault",
+  "version": "0.1.0",
+  "description": "Midsummer Vault CLI — secret injection for exported projects",
+  "bin": {
+    "vault": "bin/vault.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "optionalDependencies": {
+    "@midsummerai/vault-darwin-arm64": "0.1.0",
+    "@midsummerai/vault-darwin-x64": "0.1.0",
+    "@midsummerai/vault-linux-x64": "0.1.0",
+    "@midsummerai/vault-linux-arm64": "0.1.0",
+    "@midsummerai/vault-win32-x64": "0.1.0"
+  },
+  "license": "MIT"
+}
