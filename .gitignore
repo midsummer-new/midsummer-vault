@@ -1,6 +1,6 @@
-# binaries
-vault
-vault.exe
+# binaries (root only, not cmd/vault/)
+/vault
+/vault.exe
 /dist/
 /data/
 
