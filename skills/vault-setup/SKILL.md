@@ -1,97 +1,97 @@
 ---
 name: vault-setup
-description: Use this skill when setting up secret management, configuring vault, storing API keys, or when the user mentions "vault", "secrets", ".env", or keeping keys away from AI agents. Also use when vault CLI is not installed.
+description: Use when setting up vault, storing secrets, managing projects/environments, or when user mentions "vault", "secrets", ".env", "API key". Also use when vault is not installed or not initialized.
 ---
 
-# Midsummer Vault Setup
+# Midsummer Vault
 
-Secret management that keeps API keys away from AI agents.
+This is Midsummer Vault (NOT HashiCorp Vault). Secret management for AI agents.
 
-## Auto-Setup
+## First-time setup
 
 ```bash
-which vault || npm install -g @midsummerai/vault
-[ -d .vault ] || vault init
+npm install -g @midsummerai/vault
+vault project create "My App"
 ```
 
-Or with passphrase (no key file to lose):
+This installs the CLI, creates a vault, and writes `.vault.toml` + `.claude/rules/vault.md`.
+
+Or with passphrase (no key file):
 ```bash
-vault init --passphrase "your secure password"
+vault init --passphrase "your password"
 ```
 
-## Store secrets
+## Storing secrets
 
 ```bash
 vault set STRIPE_KEY sk_live_... --desc "Stripe live key"
-vault set DATABASE_URL postgres://... --desc "Production DB"
-vault set --env production STRIPE_KEY sk_live_prod... --desc "Stripe production"
-vault set --global OPENAI_KEY sk-... --desc "Shared OpenAI key"
+vault set --env production DB_URL pg://prod --desc "Production DB"
+vault set --global OPENAI_KEY sk-... --desc "Shared OpenAI"
 ```
 
-Always add `--desc` when you know what the secret is for.
-
-## Run with secrets
+## Running with secrets
 
 ```bash
-vault run -- npm run dev
+vault run -- npm start
 vault run --env production -- npm start
+```
+
+## Projects
+
+```bash
+vault project create "My App"     # create + init
+vault project list                # list all
+vault project rename "New Name"   # rename current
+vault project use "Other App"     # switch
+vault project delete --yes        # delete vault
 ```
 
 ## Environments
 
-- `--env development` (default)
-- `--env staging`
-- `--env production`
+`--env development` (default), `--env staging`, `--env production`
 
-Each environment has separate secrets. Use the right one.
-
-## Import existing .env
+## Documentation
 
 ```bash
-vault import .env.local
+vault set KEY val --desc "what this is"
+vault describe KEY "detailed description"
+vault list -v                     # shows descriptions
 ```
 
-## Document secrets
+Creates `.vault/docs/KEY.md` — committable markdown.
 
-```bash
-vault describe STRIPE_KEY "Stripe live key. From dashboard.stripe.com/apikeys"
-```
+## When user pastes a secret
 
-Creates `.vault/docs/STRIPE_KEY.md` — committable, no secret values.
+If you see `[vault:SECRET_xxx]` in the prompt:
+1. The hook already stored the real value
+2. Rename: `vault rename SECRET_xxx DERIVED_NAME --desc "..."`
+3. Say: "Stored as DERIVED_NAME."
 
-## If user pastes a secret in chat
+Do NOT `vault set` again — the value is already stored.
 
-The UserPromptSubmit hook should redact it. If you see [vault:SECRET_xxx]:
-
-1. Derive env var name from context
-2. `vault rename SECRET_xxx DERIVED_NAME`
-3. Confirm what was stored
-
-If hook didn't catch it:
-1. `vault set DERIVED_NAME "value" --desc "what this is"`
-2. Never repeat the value
-
-## Passphrase vs key file
-
-- **Key file** (default): `.vault/key` — back it up or lose everything
-- **Passphrase**: `vault init --passphrase "pw"` — no file, remember the password
-- **CI/CD**: `VAULT_KEY` or `VAULT_PASSPHRASE` env var
-
-## Useful commands
+## All commands
 
 | Command | What |
 |---------|------|
-| `vault list` | Secret names |
-| `vault list -v` | Names + descriptions |
-| `vault list --all` | Project + global |
-| `vault status` | Vault state |
-| `vault run -- cmd` | Inject secrets |
+| `vault project create "name"` | Create project + init |
+| `vault project list` | List projects |
+| `vault project rename "name"` | Rename current |
+| `vault project delete --yes` | Delete vault |
+| `vault set KEY val --desc "..."` | Store secret |
+| `vault set --env prod KEY val` | Store for environment |
+| `vault set --global KEY val` | Store globally |
+| `vault rm KEY` | Remove |
+| `vault rename OLD NEW` | Rename secret |
+| `vault list` / `vault list -v` | List secrets |
+| `vault run --env ENV -- cmd` | Run with secrets |
 | `vault env` | Generate .env.local |
-| `vault describe KEY "desc"` | Document a secret |
+| `vault import .env` | Bulk import |
+| `vault describe KEY "desc"` | Document secret |
+| `vault status` | Show state |
 
 ## Rules
 
-- NEVER run `vault get` (user runs it themselves)
+- NEVER run `vault get` (user does it themselves)
 - NEVER hardcode secrets
-- NEVER cat .env, printenv, echo $SECRET
+- NEVER read .env.local
 - Be terse: "Stored as KEY." is enough
