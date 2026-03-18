@@ -31,21 +31,14 @@ async function main() {
   await readStdin();
   var messages = [];
 
-  // 1. check if vault CLI is installed
+  // 1. check if vault CLI is installed (never auto-install — ask first)
   var version = run('vault', ['--version']);
   if (!version || !version.includes('midsummer')) {
-    // try to install
-    var installed = run('npm', ['install', '-g', '@midsummerai/vault']);
-    if (installed !== null) {
-      version = run('vault', ['--version']);
-      messages.push('Installed Midsummer Vault CLI.');
-    } else {
-      process.stdout.write(JSON.stringify({
-        systemMessage: 'Midsummer Vault CLI could not be installed automatically. Run: npm install -g @midsummerai/vault'
-      }));
-      process.exit(0);
-      return;
-    }
+    process.stdout.write(JSON.stringify({
+      systemMessage: 'Midsummer Vault CLI is not installed. Ask the user if they want to install it: npm install -g @midsummerai/vault. Do not install without permission.'
+    }));
+    process.exit(0);
+    return;
   }
 
   // 2. check if vault is initialized
@@ -54,11 +47,13 @@ async function main() {
   var hasToml = fs.existsSync(path.join(cwd, '.vault.toml'));
 
   if (!hasVault) {
-    // auto-init with project name from directory
-    var dirName = path.basename(cwd);
-    var result = run('vault', ['project', 'create', dirName]);
-    if (result !== null) {
-      messages.push('Created vault project "' + dirName + '".');
+    // don't auto-init — just inform the model
+    process.stdout.write(JSON.stringify({
+      systemMessage: 'Midsummer Vault CLI installed (' + version + ') but no vault in this project. When the user wants to store secrets, ask if they want to initialize: vault project create "Project Name". Do not initialize without permission.'
+    }));
+    process.exit(0);
+    return;
+    if (false) { // disabled — was auto-init
       hasVault = true;
       hasToml = true;
     }
