@@ -2,11 +2,8 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![npm](https://img.shields.io/npm/v/@midsummerai/vault)](https://www.npmjs.com/package/@midsummerai/vault)
-[![GitHub stars](https://img.shields.io/github/stars/midsummer-new/midsummer-vault)](https://github.com/midsummer-new/midsummer-vault)
 
 **Secret management for AI agents.** Keeps API keys away from LLMs.
-
-Secrets are encrypted locally and injected into child processes at runtime. The AI agent never sees the actual values — not in the prompt, not in tool output, not in file contents.
 
 ## Install
 
@@ -22,95 +19,87 @@ vault set STRIPE_KEY sk_live_...    # store a secret
 vault run -- npm run dev            # inject secrets into process
 ```
 
-Your dev server gets `STRIPE_KEY` in its environment. The AI agent that launched it never saw the value.
+## Passphrase Mode (no key file to lose)
+
+```bash
+vault init --passphrase "my secure password"
+VAULT_PASSPHRASE="my secure password" vault run -- npm start
+```
+
+No `.vault/key` file. Key derived from your passphrase via Argon2id.
+
+## Environments
+
+```bash
+vault set STRIPE_KEY sk_test_... --env development
+vault set STRIPE_KEY sk_live_... --env production
+vault run --env production -- npm start
+```
 
 ## Project vs Global Secrets
-
-Each project gets its own `.vault/` — secrets don't leak between projects.
 
 ```bash
 vault set STRIPE_KEY sk_live_...          # project only
 vault set --global OPENAI_KEY sk-proj-... # shared across all projects
-
-vault list                                # project secrets
-vault list --all                          # both, shows overrides
-
 vault run -- npm start                    # merges both (project wins)
 ```
 
-## Claude Code Plugin
+## Secret Documentation
 
-Automatically detects and redacts secrets from your conversations:
+```bash
+vault set STRIPE_KEY sk_live_... --desc "Stripe live key for payments"
+vault describe STRIPE_KEY "From dashboard.stripe.com/apikeys"
+vault list -v                             # shows descriptions
+```
+
+Creates `.vault/docs/STRIPE_KEY.md` — committable to git, no secret values.
+
+## Claude Code Plugin
 
 ```
 /plugin marketplace add midsummer-new/midsummer-vault
 /plugin install midsummer-vault@midsummer-vault
 ```
 
-### What the plugin does
-
-| Hook | When | What |
-|------|------|------|
-| **Secret detection** | You type a message | 4-layer scanner finds API keys, replaces with `[vault:REF]` before the model sees it |
-| **Env blocking** | Agent runs `cat .env` or `printenv` | Blocks the command |
-| **Write blocking** | Agent writes secrets to `.env` files | Blocks the write |
-| **Bash redaction** | Agent command outputs a secret | Redacts known values from output |
-| **Read redaction** | Agent reads a file with secrets | Redacts known values from content |
-
-### How it works
-
-```
-You type:  "use this stripe key sk_live_51OaJqDG..."
-
-Hook intercepts -> stores in vault -> replaces in prompt
-
-Model sees: "use this stripe key [vault:STRIPE_SECRET_c36b]"
-Model runs: vault rename STRIPE_SECRET_c36b STRIPE_SECRET_KEY
-Model runs: vault run -- npm start  (secrets injected, never saw values)
-```
-
-### Detection layers
-
-1. **Known prefixes** — 35+ services: Stripe, AWS, GitHub, OpenAI, Anthropic, Slack, SendGrid...
-2. **Structural patterns** — JWTs, connection strings, private keys
-3. **Shannon entropy** — catches unknown high-randomness strings
-4. **Keyword proximity** — boosts confidence near "key", "secret", "token"
+5 hooks: secret detection in prompts, env blocking, write blocking, output redaction.
 
 ## Commands
 
 | Command | What |
 |---------|------|
 | `vault init` | Create project vault |
-| `vault init --global` | Create shared vault (~/.vault/) |
-| `vault set KEY value` | Store secret (project) |
-| `vault set --global KEY value` | Store secret (shared) |
-| `vault get KEY` | Retrieve (checks project, then global) |
+| `vault init --passphrase "pw"` | Create with passphrase (no key file) |
+| `vault set KEY value` | Store secret |
+| `vault set --env prod KEY val` | Store for specific environment |
+| `vault set --global KEY val` | Store globally (shared) |
+| `vault get KEY` | Retrieve value |
 | `vault rm KEY` | Remove |
-| `vault rename OLD NEW` | Rename / map to env var |
-| `vault list` | Project secrets |
+| `vault rename OLD NEW` | Rename |
+| `vault list` | List names |
+| `vault list -v` | List with descriptions |
 | `vault list --all` | Project + global |
-| `vault run -- cmd` | Run with all secrets injected |
-| `vault env` | Generate .env.local from vault |
+| `vault run -- cmd` | Run with secrets injected |
+| `vault env` | Generate .env.local |
 | `vault import .env` | Bulk import |
-| `vault status` | Show both vaults |
+| `vault describe KEY "desc"` | Document a secret (markdown) |
+| `vault status` | Show vault state |
 
-## How secrets are protected
+## Security
 
-**Encryption:** AES-256-GCM with random 12-byte IV per write. 256-bit key with 0600 permissions.
-
-**Process isolation:** `vault run` replaces the process via `syscall.Exec`. No parent process to inspect.
-
-**Project scoping:** `.vault/` lookup stops at the git root. Secrets never leak between projects.
-
-**Prompt redaction:** Secrets in your messages are caught and replaced with `[vault:REF]` before the model sees them.
-
-**Output redaction:** Known vault values are stripped from command output and file contents.
+- **AES-256-GCM** encryption with random IV per write
+- **Argon2id** key derivation for passphrase mode
+- **Process isolation** via `syscall.Exec` (agent process replaced)
+- **Project scoping** stops at git root (no cross-project leaks)
+- **Prompt redaction** detects secrets before model sees them
+- **Output redaction** strips values from command output
 
 ## CI/CD
 
 ```yaml
 env:
   VAULT_KEY: ${{ secrets.VAULT_KEY }}
+  # or for passphrase vaults:
+  VAULT_PASSPHRASE: ${{ secrets.VAULT_PASSPHRASE }}
 steps:
   - run: vault run -- npm test
 ```
