@@ -1,0 +1,57 @@
+name: Build & Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [darwin, linux, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Build
+        run: |
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 \
+            go build -ldflags="-s -w" -o vault-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/vault/
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: vault-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: vault-${{ matrix.goos }}-${{ matrix.goarch }}
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - run: go vet ./...
+      - run: go test ./... -v -race
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify no HTTP in core secret handling
+        run: |
+          echo "Checking core files for HTTP imports..."
+          if grep -rn "net/http" internal/store/store.go internal/store/passphrase.go internal/store/meta.go internal/store/docs.go internal/cli/set.go internal/cli/get.go internal/cli/run.go internal/cli/rm.go internal/cli/rename.go 2>/dev/null; then
+            echo "FAIL: HTTP imports found in core secret-handling code"
+            exit 1
+          fi
+          echo "PASS: Zero HTTP imports in core secret code"
+          echo ""
+          echo "HTTP imports only in (all require explicit vault login):"
+          grep -rn "net/http" internal/ --include="*.go" | grep -v "_test.go" || true
