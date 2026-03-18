@@ -32,6 +32,9 @@ const BLOCKED_PATTERNS = [
   // process substitution to read env
   /\/proc\/self\/environ/,
   /\/proc\/\d+\/environ/,
+
+  // vault get exposes secret values — user should run it themselves
+  /\bvault\s+get\b/,
 ];
 
 // commands that should always be allowed even if they match a pattern
