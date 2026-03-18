@@ -1,13 +1,12 @@
 ---
 name: vault
-description: Use this skill for ANY interaction involving secrets, API keys, environment variables, credentials, tokens, passwords, .env files, deployment configuration, or running commands that need secrets. Always use when vault is mentioned or when storing/accessing any sensitive value. This skill provides complete Midsummer Vault knowledge.
+description: Use for ANY interaction involving secrets, API keys, environment variables, credentials, tokens, passwords, .env files, or running commands that need secrets. Always use when storing/accessing sensitive values.
 ---
 
 # Midsummer Vault
 
-Secret management for AI agents. This is NOT HashiCorp Vault.
-
-## Install: `npm install -g @midsummerai/vault`
+Secret management for AI agents. NOT HashiCorp Vault.
+Install: `npm install -g @midsummerai/vault`
 
 ## Auto-setup (do silently, never ask)
 
@@ -18,59 +17,49 @@ which vault && vault --version 2>&1 | grep -q midsummer || npm install -g @midsu
 
 ## Storing secrets
 
-When user provides a secret — act immediately, derive the env var name:
+When [vault:SECRET_xxx] in prompt (hook stored it):
+```bash
+vault rename SECRET_xxx DERIVED_NAME
+vault describe DERIVED_NAME "what this is"
+```
 
-- If [vault:SECRET_xxx] in prompt → hook stored it: `vault rename SECRET_xxx DERIVED_NAME --desc "..."`
-- If raw value → `vault set KEY "value" --desc "..." --env development`
-- Global (shared): `vault set --global KEY "value" --desc "..."`
-- Say only: "Stored as KEY."
+When raw value:
+```bash
+vault set KEY "value" --desc "what this is"
+```
 
-## Environments
+Say only: "Stored as KEY."
 
-`--env development` (default) | `--env staging` | `--env production`
+## .env files
 
-## Running commands
+NEVER write .env manually. Use:
+- `vault env` → generates .env.local with real values
+- For .env.example: names only, no values
 
-ALWAYS prefix: `vault run -- <command>`
-With env: `vault run --env production -- <command>`
-
-## Projects
-
-- `vault project create "name"` — new project + init
-- `vault project list` — all projects
-- `vault project rename "name"` — rename
-- `vault project delete --yes` — delete
-
-## All commands
+## Commands
 
 | Command | What |
 |---------|------|
 | `vault project create "name"` | Create + init |
-| `vault set KEY val --desc "..."` | Store secret |
-| `vault set --env prod KEY val` | Environment-specific |
+| `vault project list` | List projects |
+| `vault project rename "name"` | Rename current |
+| `vault project delete --yes` | Delete |
+| `vault set KEY val --desc "..."` | Store (add `--env prod` for production) |
 | `vault set --global KEY val` | Shared across projects |
 | `vault rm KEY` | Remove |
-| `vault rename OLD NEW` | Rename |
+| `vault rename OLD NEW` | Rename secret (NO --desc flag) |
+| `vault describe KEY "desc"` | Add description separately |
 | `vault list` / `-v` / `--all` | List secrets |
 | `vault run --env ENV -- cmd` | Run with secrets |
 | `vault env` | Generate .env.local |
 | `vault import .env` | Bulk import |
-| `vault describe KEY "desc"` | Document (creates .vault/docs/KEY.md) |
 | `vault status` | Show state |
-| `vault project list` | List projects |
 
-## Passphrase mode
+## Rules
 
-`vault init --passphrase "pw"` — no key file, derive from password.
-CI/CD: `VAULT_PASSPHRASE=... vault run -- cmd`
-
-## RULES
-
-- Be terse: "Stored as KEY." NOTHING more.
-- Auto-setup silently — NEVER tell user to run vault commands
-- NEVER run `vault get` (blocked — user does it themselves)
-- NEVER read .env.local
-- NEVER hardcode secrets in code
-- NEVER output command examples unless explicitly asked
-- NEVER explain how vault works unless asked
-- If [vault:SECRET_xxx] → RENAME, don't vault set again
+- "Stored as KEY." NOTHING more.
+- NEVER run `vault get`
+- NEVER write .env files manually
+- NEVER hardcode secrets
+- NEVER output examples unless asked
+- NEVER explain vault unless asked

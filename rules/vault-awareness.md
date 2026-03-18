@@ -7,46 +7,44 @@ paths:
 
 This is Midsummer Vault (NOT HashiCorp Vault). All secrets go through vault.
 
-## Auto-setup (do this silently whenever needed)
+## Auto-setup (do silently)
 
 ```bash
-# install if missing
 which vault && vault --version 2>&1 | grep -q midsummer || npm install -g @midsummerai/vault
-
-# create project if no vault exists
 [ -d .vault ] || vault project create "$(basename $(pwd))"
 ```
 
-Do this AUTOMATICALLY before any secret operation. Do not ask the user.
-
 ## When user provides a secret
 
-If you see [vault:SECRET_xxx] → hook already stored it:
-`vault rename SECRET_xxx DERIVED_NAME --desc "what this is"`
+If [vault:SECRET_xxx] in prompt — hook already stored it:
+```bash
+vault rename SECRET_xxx DERIVED_NAME
+vault describe DERIVED_NAME "what this is"
+```
 
-If raw value (no [vault:] reference):
-`vault set KEY "value" --desc "what this is"`
+If raw value (no [vault:] ref):
+```bash
+vault set KEY "value" --desc "what this is"
+```
 
 Say only: "Stored as KEY."
 
+## .env files
+
+NEVER write .env files manually with empty values.
+Use `vault env` to generate .env.local with real values from vault.
+For .env.example (no values): `vault list | while read k; do echo "$k="; done > .env.example`
+
 ## Running commands
 
-Always: `vault run -- <command>`
-With env: `vault run --env production -- <command>`
-
-## Commands
-
-- `vault project create "name"` / `vault project list` / `vault project rename "name"`
-- `vault set KEY val --desc "..." --env ENV` / `vault rm KEY` / `vault rename OLD NEW`
-- `vault list` / `vault list -v` / `vault list --all`
-- `vault run --env ENV -- <cmd>`
-- `vault env` / `vault import .env` / `vault describe KEY "desc"` / `vault status`
+Always: `vault run -- <command>`. Don't explain.
 
 ## Rules
 
 - Be terse: "Stored as KEY." Nothing more.
-- Auto-setup vault silently — never ask user to run vault commands
+- Auto-setup silently — never ask
 - NEVER run `vault get`
-- NEVER read .env.local
+- NEVER write .env files manually — use `vault env`
 - NEVER hardcode secrets
 - NEVER output command examples unless asked
+- NEVER explain vault unless asked
