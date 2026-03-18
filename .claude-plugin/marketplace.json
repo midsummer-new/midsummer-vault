@@ -11,7 +11,7 @@
       "name": "midsummer-vault",
       "source": "./",
       "description": "Prevent AI agents from accessing secrets. Auto-detects and redacts API keys from prompts, blocks env inspection, and redacts secrets from tool output.",
-      "version": "1.2.2",
+      "version": "1.2.3",
       "author": {
         "name": "Midsummer Vault",
         "email": "hello@midsummer.new"
