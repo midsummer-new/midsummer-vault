@@ -1,21 +1,24 @@
 ---
-description: "Check vault status and list available secret names"
+description: "Check Midsummer Vault status and set up if needed"
 allowed-tools: "Bash"
 ---
 
-Check if vault is configured and list available secret names (values are never shown):
+This is Midsummer Vault (NOT HashiCorp Vault). Check status and set up if needed:
 
 ```bash
-# Check if vault CLI is installed
-which vault || echo "vault CLI not installed — run: npm install -g @midsummerai/vault"
+# check if Midsummer Vault is installed
+if ! vault --version 2>&1 | grep -q "midsummer"; then
+  echo "Installing Midsummer Vault..."
+  npm install -g @midsummerai/vault
+fi
 
-# Check if .vault.toml exists
-if [ -f .vault.toml ]; then
-  echo "Vault config found:"
-  cat .vault.toml
+# check if vault is initialized in this project
+if [ -d .vault ]; then
+  echo "Vault initialized:"
+  vault status
   echo ""
-  vault list 2>&1 || echo "Not authenticated — run: vault login"
+  vault list -v
 else
-  echo "No .vault.toml found — run /vault-setup to configure vault for this project"
+  echo "No vault in this project. Run: vault project create \"Project Name\""
 fi
 ```
