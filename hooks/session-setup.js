@@ -1,20 +1,19 @@
 #!/usr/bin/env node
 
 /**
- * SessionStart hook: ensures vault CLI is installed and project is initialized.
- * Runs once when Claude Code starts. Sets up everything automatically.
+ * SessionStart hook: auto-installs vault CLI and initializes project.
+ * Does the work itself — doesn't just tell the model what to do.
  */
 
-var execFile = require('child_process').execFileSync;
+var execFileSync = require('child_process').execFileSync;
 var fs = require('fs');
 var path = require('path');
 
+var ENV = { ...process.env, PATH: process.env.PATH + ':/usr/local/bin:/opt/homebrew/bin:/usr/local/share/npm/bin' };
+
 function run(cmd, args) {
   try {
-    return execFile(cmd, args || [], {
-      stdio: 'pipe', timeout: 15000,
-      env: { ...process.env, PATH: process.env.PATH + ':/usr/local/bin:/opt/homebrew/bin' }
-    }).toString().trim();
+    return execFileSync(cmd, args || [], { stdio: 'pipe', timeout: 30000, env: ENV }).toString().trim();
   } catch { return null; }
 }
 
@@ -29,41 +28,55 @@ function readStdin() {
 }
 
 async function main() {
-  var raw = await readStdin();
+  await readStdin();
+  var messages = [];
 
-  // check if vault CLI is installed
+  // 1. check if vault CLI is installed
   var version = run('vault', ['--version']);
   if (!version || !version.includes('midsummer')) {
-    // not installed or wrong vault — output context telling model to install
-    var msg = JSON.stringify({
-      systemMessage: 'Midsummer Vault CLI is not installed. Run: npm install -g @midsummerai/vault'
-    });
-    process.stdout.write(msg);
-    process.exit(0);
-    return;
+    // try to install
+    var installed = run('npm', ['install', '-g', '@midsummerai/vault']);
+    if (installed !== null) {
+      version = run('vault', ['--version']);
+      messages.push('Installed Midsummer Vault CLI.');
+    } else {
+      process.stdout.write(JSON.stringify({
+        systemMessage: 'Midsummer Vault CLI could not be installed automatically. Run: npm install -g @midsummerai/vault'
+      }));
+      process.exit(0);
+      return;
+    }
   }
 
-  // check if vault is initialized in current project
-  var cwd = process.env.CWD || process.cwd();
+  // 2. check if vault is initialized
+  var cwd = process.cwd();
   var hasVault = fs.existsSync(path.join(cwd, '.vault'));
 
   if (!hasVault) {
-    var msg = JSON.stringify({
-      systemMessage: 'Midsummer Vault is installed (' + version + ') but not initialized in this project. When the user wants to store secrets, run: vault project create "Project Name"'
-    });
-    process.stdout.write(msg);
-    process.exit(0);
-    return;
+    // auto-init with project name from directory
+    var dirName = path.basename(cwd);
+    var result = run('vault', ['project', 'create', dirName]);
+    if (result !== null) {
+      messages.push('Created vault project "' + dirName + '".');
+      hasVault = true;
+    }
   }
 
-  // vault is ready — output status as context
-  var list = run('vault', ['list']);
-  var secretCount = list ? list.split('\n').filter(function(l) { return l.trim(); }).length : 0;
+  // 3. report status
+  if (hasVault) {
+    var list = run('vault', ['list']);
+    var count = list ? list.split('\n').filter(function(l) { return l.trim(); }).length : 0;
+    var msg = 'Midsummer Vault active (' + (version || 'installed') + '). ' + count + ' secrets. ';
+    msg += 'Install: npm install -g @midsummerai/vault. ';
+    msg += 'This is NOT HashiCorp Vault. Use vault commands for all secret operations.';
+    if (messages.length > 0) msg = messages.join(' ') + ' ' + msg;
+    process.stdout.write(JSON.stringify({ systemMessage: msg }));
+  } else {
+    process.stdout.write(JSON.stringify({
+      systemMessage: 'Midsummer Vault CLI installed but project init failed. Run: vault project create "Project Name". Install: npm install -g @midsummerai/vault'
+    }));
+  }
 
-  var msg = JSON.stringify({
-    systemMessage: 'Midsummer Vault active. ' + secretCount + ' secrets stored. Use vault commands for secret management. This is NOT HashiCorp Vault.'
-  });
-  process.stdout.write(msg);
   process.exit(0);
 }
 
