@@ -104,10 +104,16 @@ function hash(v) { return crypto.createHash('sha256').update(v).digest('hex').sl
 function envName(n) { return ENV_MAP[n.replace(/_[a-f0-9]{8}$/,'')] || n; }
 
 function tryStore(name, value) {
+  var execOpts = { stdio: 'pipe', timeout: 5000, env: { ...process.env, PATH: process.env.PATH + ':/usr/local/bin:/opt/homebrew/bin' } };
+  var execFile = require('child_process').execFileSync;
   try {
-    require('child_process').execFileSync('vault', ['set', name, value], {
-      stdio: 'pipe', timeout: 3000, env: { ...process.env, PATH: process.env.PATH + ':/usr/local/bin:/opt/homebrew/bin' }
-    });
+    // auto-init vault if not initialized
+    try {
+      execFile('vault', ['list'], execOpts);
+    } catch {
+      try { execFile('vault', ['init'], execOpts); } catch { /* ignore */ }
+    }
+    execFile('vault', ['set', name, value], execOpts);
     return true;
   } catch { return false; }
 }
