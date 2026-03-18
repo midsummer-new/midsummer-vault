@@ -9,9 +9,25 @@
   "homepage": "https://github.com/midsummer-new/midsummer-vault",
   "repository": "https://github.com/midsummer-new/midsummer-vault",
   "license": "MIT",
-  "keywords": ["security", "secrets", "vault", "env", "api-keys", "agent-safety"],
+  "keywords": [
+    "security",
+    "secrets",
+    "vault",
+    "env",
+    "api-keys",
+    "agent-safety"
+  ],
   "category": "security",
-  "skills": ["./skills/vault-setup/SKILL.md"],
-  "commands": ["./commands/vault-run.md", "./commands/vault-check.md"],
-  "rules": ["./rules/no-env-secrets.md", "./rules/vault-awareness.md"]
+  "skills": [
+    "./skills/vault-setup/SKILL.md",
+    "./skills/vault/SKILL.md"
+  ],
+  "commands": [
+    "./commands/vault-run.md",
+    "./commands/vault-check.md"
+  ],
+  "rules": [
+    "./rules/no-env-secrets.md",
+    "./rules/vault-awareness.md"
+  ]
 }
