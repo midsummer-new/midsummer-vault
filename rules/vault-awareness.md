@@ -5,45 +5,52 @@ paths:
 
 # Midsummer Vault
 
-This project uses Midsummer Vault for secret management.
+Secrets managed through vault. Be brief — just use it.
 
-## Setup (if vault not installed)
+## Setup
 
 ```bash
 which vault || npm install -g @midsummerai/vault
-vault init  # if .vault/ doesn't exist
+[ -d .vault ] || vault init
 ```
+
+## Storing secrets
+
+Act immediately. Derive env var name from context.
+
+```bash
+vault set KEY "value" --desc "what this is" --env development
+vault set --global OPENAI_KEY "value" --desc "shared OpenAI key"
+vault set --env production STRIPE_KEY "value" --desc "Stripe live key"
+```
+
+## Running with secrets
+
+```bash
+vault run -- npm start
+vault run --env production -- npm start
+```
+
+## Environments
+
+`--env development` (default), `--env staging`, `--env production`
 
 ## Commands
 
-- `vault list` — list stored secret names (never shows values)
-- `vault status` — show vault state
-- `vault set KEY value` — store a secret
-- `vault get KEY` — retrieve a secret value
-- `vault rename OLD NEW` — rename / map to env var
-- `vault rm KEY` — delete a secret
-- `vault run -- <command>` — run with secrets injected as env vars
-- `vault import .env` — bulk import from .env file
-- `vault env` — generate .env.local from vault
-- `vault push vercel` — push secrets to Vercel
-- `vault push fly` — push secrets to Fly.io
-
-## When a user provides a secret
-
-Act IMMEDIATELY. Do NOT ask what to name it.
-
-1. Check: `which vault || npm install -g @midsummerai/vault`
-2. Check: if no `.vault/` directory, run `vault init`
-3. Derive env var name from context ("redis key" → REDIS_KEY, "stripe" → STRIPE_SECRET_KEY)
-4. If [vault:SECRET_xxx] reference: `vault rename SECRET_xxx DERIVED_NAME`
-5. If raw value: `vault set DERIVED_NAME "value"`
-6. Sync: `vault env`
-7. Confirm: "Stored as REDIS_KEY. Use: vault run -- <command>"
-8. NEVER echo the secret value
+- `vault set KEY value --desc "..." --env ENV`
+- `vault rm KEY --env ENV`
+- `vault rename OLD NEW`
+- `vault list` / `vault list -v` / `vault list --all`
+- `vault run --env ENV -- <command>`
+- `vault env` (sync .env.local)
+- `vault import .env`
+- `vault describe KEY "description"`
+- `vault status`
 
 ## Rules
 
-- NEVER hardcode secrets in source code or .env files
-- NEVER use cat .env, printenv, echo $SECRET
-- ALWAYS use `vault run -- <command>` to inject secrets
-- After any change, run `vault env` to sync .env.local
+- NEVER run `vault get` (exposes values — user runs it themselves)
+- NEVER hardcode secrets in code
+- NEVER cat .env, printenv, echo $SECRET
+- ALWAYS use `vault run --` for commands needing secrets
+- Be terse: "Stored as REDIS_KEY." is enough
