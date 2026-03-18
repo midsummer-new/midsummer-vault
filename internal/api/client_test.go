@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Reichel1/midsummer/vault-cli/internal/config"
+	"github.com/midsummer-new/midsummer-vault/internal/config"
 )
 
 func makeJWT(exp int64, claims map[string]interface{}) string {

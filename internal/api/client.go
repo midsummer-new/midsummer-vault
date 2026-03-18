@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Reichel1/midsummer/vault-cli/internal/auth"
-	"github.com/Reichel1/midsummer/vault-cli/internal/config"
+	"github.com/midsummer-new/midsummer-vault/internal/auth"
+	"github.com/midsummer-new/midsummer-vault/internal/config"
 )
 
 // Client communicates with the Midsummer AI API.

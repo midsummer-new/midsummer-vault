@@ -7,10 +7,10 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/Reichel1/midsummer/vault-cli/internal/api"
-	"github.com/Reichel1/midsummer/vault-cli/internal/auth"
-	"github.com/Reichel1/midsummer/vault-cli/internal/config"
-	"github.com/Reichel1/midsummer/vault-cli/internal/store"
+	"github.com/midsummer-new/midsummer-vault/internal/api"
+	"github.com/midsummer-new/midsummer-vault/internal/auth"
+	"github.com/midsummer-new/midsummer-vault/internal/config"
+	"github.com/midsummer-new/midsummer-vault/internal/store"
 	"github.com/spf13/cobra"
 )
 

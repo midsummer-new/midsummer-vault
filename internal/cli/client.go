@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	vaultapi "github.com/Reichel1/midsummer/vault-cli/internal/api"
-	"github.com/Reichel1/midsummer/vault-cli/internal/config"
+	vaultapi "github.com/midsummer-new/midsummer-vault/internal/api"
+	"github.com/midsummer-new/midsummer-vault/internal/config"
 )
 
 // clientResult holds an API client and the project ID to use.

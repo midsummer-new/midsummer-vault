@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Reichel1/midsummer/vault-cli/internal/store"
+	"github.com/midsummer-new/midsummer-vault/internal/store"
 	"github.com/spf13/cobra"
 )
 

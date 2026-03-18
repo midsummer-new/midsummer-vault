@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/Reichel1/midsummer/vault-cli/internal/cli"
+	"github.com/midsummer-new/midsummer-vault/internal/cli"
 )
 
 func main() {

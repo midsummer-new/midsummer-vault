@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/Reichel1/midsummer/vault-cli/internal/config"
+	"github.com/midsummer-new/midsummer-vault/internal/config"
 	"github.com/spf13/cobra"
 )
 

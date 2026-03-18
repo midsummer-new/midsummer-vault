@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/Reichel1/midsummer/vault-cli/internal/config"
+	"github.com/midsummer-new/midsummer-vault/internal/config"
 )
 
 const (

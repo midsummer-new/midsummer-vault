@@ -1,4 +1,4 @@
-module github.com/Reichel1/midsummer/vault-cli
+module github.com/midsummer-new/midsummer-vault
 
 go 1.25.6
 
