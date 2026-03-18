@@ -51,6 +51,7 @@ async function main() {
   // 2. check if vault is initialized
   var cwd = process.cwd();
   var hasVault = fs.existsSync(path.join(cwd, '.vault'));
+  var hasToml = fs.existsSync(path.join(cwd, '.vault.toml'));
 
   if (!hasVault) {
     // auto-init with project name from directory
@@ -59,7 +60,13 @@ async function main() {
     if (result !== null) {
       messages.push('Created vault project "' + dirName + '".');
       hasVault = true;
+      hasToml = true;
     }
+  } else if (!hasToml) {
+    // vault exists but no project — create project (writes .vault.toml only)
+    var dirName = path.basename(cwd);
+    run('vault', ['project', 'create', dirName]);
+    hasToml = true;
   }
 
   // 3. report status
